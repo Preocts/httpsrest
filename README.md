@@ -1,16 +1,10 @@
-# python-template
+# httpsrest
+
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 [![pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit&logoColor=white)](https://github.com/pre-commit/pre-commit)
 [![pre-commit.ci status](https://results.pre-commit.ci/badge/github/Preocts/python-template/main.svg)](https://results.pre-commit.ci/latest/github/Preocts/python-template/main)
 
-
-This is a template example of how I structure an initial python project.
-
----
-
-# Module Name
-
-Module Description
+**WIP**
 
 ### Requirements
 - Python 3.8
@@ -23,8 +17,8 @@ The instruction below make use of a bash shell and a Makefile.  All commands sho
 
 Clone this repo and enter root directory of repo:
 ```bash
-$ git clone https://github.com/Preocts/[MODULE_NAME]
-$ cd [MODULE_NAME]
+$ git clone https://github.com/Preocts/httpsrest
+$ cd httpsrest
 ```
 
 Create and activate `venv`:

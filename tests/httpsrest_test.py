@@ -1,11 +1,11 @@
 """Tests for sample"""
+import httpsrest
 import pytest
-from module_name import sample
 
 
 def test_main() -> None:
     """Main test"""
-    assert sample.main()
+    assert httpsrest.main()
 
 
 @pytest.mark.parametrize(
@@ -17,4 +17,4 @@ def test_main() -> None:
     ),
 )
 def test_squared(value_in: int, expected: int) -> None:
-    assert sample.squared(value_in) == expected
+    assert httpsrest.squared(value_in) == expected
