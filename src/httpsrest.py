@@ -4,9 +4,16 @@ HTTPS REST API Handler
 Author: Preocts <preocts@preocts.com>
 Repo: https/github.com/Preocts/httpsrest
 """
+import json
 import logging
+from http.client import HTTPException
+from http.client import HTTPSConnection
+from typing import Any
+from typing import Dict
 from typing import MutableSet
+from typing import Optional
 from typing import Tuple
+from urllib import parse
 
 TIMEOUT_DEFAULT = 30
 THROTTLE_TIMEOUT_DEFAULT = 60
@@ -27,6 +34,7 @@ class HttpsRestConfig:
         self.retry_on: MutableSet[int] = RETRY_ON_DEFAULT
         self.encode_url: bool = ENCODE_URL_DEFAULT
         self.use_urlencode: bool = USE_URLENCODE_DEFAULT
+        self.port: int = 443
 
 
 class HttpsRest:
@@ -36,6 +44,7 @@ class HttpsRest:
 
     def __init__(self, url: str, base_route: str = "") -> None:
         """url should be domain level only. No routes, no HTTPS://"""
+        self._client: Optional[HTTPSConnection] = None
         self._url = self._parse_url(url)
         self._base_route = ""
         self._config = HttpsRestConfig()
@@ -50,6 +59,11 @@ class HttpsRest:
     def base_route(self) -> str:
         """Base route appended to all API calls"""
         return self._base_route
+
+    @property
+    def port(self) -> int:
+        """Returns port being used. Defaults to 443"""
+        return self._config.port
 
     @property
     def timeout(self) -> int:
@@ -85,6 +99,11 @@ class HttpsRest:
         """
         return tuple(self._config.retry_on)
 
+    def set_port(self, port: int) -> None:
+        """Sets port to be used"""
+        self._parse_no_negative_int(port)
+        self._config.port = port if (port > 1) and (port < 65535) else 443
+
     def set_timeout(self, seconds: int = TIMEOUT_DEFAULT) -> None:
         """Set the time, in seconds, a connection will wait before timing out"""
         self._config.connection_timeout = self._parse_no_negative_int(seconds)
@@ -115,6 +134,32 @@ class HttpsRest:
         for code in args:
             self._config.retry_on.discard(code)
 
+    def set_base_route(self, base_route: str) -> str:
+        """Set the default route for all calls. Returns stored value."""
+        if base_route:
+            prefix = "/" if not base_route.startswith("/") else ""
+            post_strip = "/" if base_route.endswith("/") else ""
+            self._base_route = f"{prefix}{base_route.rstrip(post_strip)}"
+        else:
+            self._base_route = ""
+        return self.base_route
+
+    def format_payload(self, payload: Dict[str, Any]) -> str:
+        """Formats paylaod into string"""
+        if self._config.use_urlencode:
+            return parse.urlencode(payload, doseq=True)
+        return json.dumps(payload)
+
+    def format_route(self, route: str) -> str:
+        """Formats route, encoding if needed and pre-fixing base_route"""
+        if route.startswith("/"):
+            combined_route = "".join([self._base_route, route])
+        else:
+            combined_route = "/".join([self.base_route, route])
+        if self._config.encode_url:
+            return parse.quote(combined_route, safe="/?=&")
+        return combined_route
+
     def _parse_no_negative_int(self, value: int, default: int = 0) -> int:
         """Returns value or default if value is less than 0"""
         if isinstance(value, int):
@@ -135,9 +180,22 @@ class HttpsRest:
 
         return cleaned_url
 
-    def set_base_route(self, base_route: str) -> str:
-        """Set the default route for all calls. Returns stored value."""
-        prefix = "/" if not base_route.startswith("/") else ""
-        post_strip = "/" if base_route.endswith("/") else ""
-        self._base_route = f"{prefix}{base_route.rstrip(post_strip)}"
-        return self.base_route
+    def _connect(self) -> None:
+        """Opens the connection. Not usually needed to be called directly"""
+        try:
+            self._client = HTTPSConnection(
+                host=self.url,
+                port=self.port,
+                timeout=self.timeout,
+            )
+        except HTTPException as err:
+            self.logger.error("Connect attempt failed: %s", err)
+
+    def get(self, route: str) -> int:
+        if self._client is None:
+            return 0
+
+        self._client.request("GET", route, None, headers={})
+        response = self._client.getresponse()
+
+        return response.status

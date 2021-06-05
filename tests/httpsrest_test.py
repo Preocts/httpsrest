@@ -65,6 +65,11 @@ def test_set_base_route(base_client: HttpsRest, base_route: str, expected: str) 
         ("max_retries", -19, 0),
         ("max_retries", 0, 0),
         ("max_retries", "foo", -1),
+        ("port", 80, 80),
+        ("port", -19, 443),
+        ("port", 0, 443),
+        ("port", 65536, 443),
+        ("port", "foo", -1),
     ),
 )
 def test_get_set_config_ints(
@@ -112,3 +117,34 @@ def test_retry_on_set_remove_get(base_client: HttpsRest) -> None:
     base_client.remove_retry_on_codes(1, 2, -3, 4)
     assert len(base_client.retry_on) == start_len
     assert 4 not in base_client.retry_on
+
+
+def test_format_payload(base_client: HttpsRest) -> None:
+    """Two variants available"""
+    payload = {"sample": "test value", "values": None}
+    expected_default = '{"sample": "test value", "values": null}'
+    expected_urlencoded = "sample=test+value&values=None"
+
+    assert base_client.format_payload(payload) == expected_default
+
+    base_client.set_use_urlencode(True)
+
+    assert base_client.format_payload(payload) == expected_urlencoded
+
+
+@pytest.mark.parametrize(
+    ("encode", "in_", "out"),
+    (
+        (False, "api/members?test=my test", "/api/members?test=my test"),
+        (False, "/api/members?test=my test", "/api/members?test=my test"),
+        (True, "api/members?test=my test", "/api/members?test=my%20test"),
+        (True, "/api/members?test=my test", "/api/members?test=my%20test"),
+    ),
+)
+def test_format_route_encoding(
+    base_client: HttpsRest, encode: bool, in_: str, out: str
+) -> None:
+    """Test formatting the route with encoding and without"""
+    base_client.set_encode_url(encode)
+    result = base_client.format_route(in_)
+    assert result == out
