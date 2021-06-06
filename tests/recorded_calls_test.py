@@ -5,11 +5,23 @@ from typing import Generator
 from unittest.mock import patch
 
 import pytest
+import vcr
 from httpsrest import HttpsRest
 
 from tests.localrest import MockServer
 
+RERECORD_ON_RUN = True
+
 MOCK_SSL_FILE = "tests/fixtures/mock_server.pem"
+CASSETTE_FILE = "tests/fixtures/cassettes/playback.yaml"
+
+vcr_record = vcr.VCR(
+    serializer="yaml",
+    cassette_library_dir="tests/fixtures/cassettes",
+    record_mode="once",
+    match_on=["uri", "method"],
+    ignore_localhost=False,
+)
 
 
 @pytest.fixture(scope="session", name="mock_server")
@@ -36,6 +48,7 @@ def fixture_mock_httpsconn(
     yield httpsconn
 
 
+# @vcr_record.use_cassette(CASSETTE_FILE)
 @pytest.fixture(scope="function", name="base_client")
 def fixture_base_client(
     mock_httpsconn: HTTPSConnection,
@@ -46,8 +59,24 @@ def fixture_base_client(
         yield client
 
 
-def test_valid_get(base_client: HttpsRest) -> None:
-    """GET test"""
+@pytest.mark.parametrize(
+    ("method", "route", "result"),
+    (("get", "/200", 200),),
+)
+def test_valid_get(
+    base_client: HttpsRest, method: str, route: str, result: int
+) -> None:
+    """Method tests"""
     base_client.set_timeout(1)
-    result = base_client.get("/my/path")
-    assert result == 200
+    attrib = getattr(base_client, method)
+    attrib(route)
+    assert result == result
+
+
+# ctx = ssl.create_default_context()
+# ctx.check_hostname = False
+# ctx.verify_mode = ssl.CERT_NONE
+# [12:06 PM]
+# try adding this
+# [12:06 PM]
+# also, add context = ctx in urlopen
