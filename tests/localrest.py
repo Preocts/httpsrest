@@ -8,7 +8,6 @@ Requires a `server.pem` file to be generated. Do NOT commit this file
 import json
 import socket
 import ssl
-from http.client import HTTPSConnection
 from http.server import BaseHTTPRequestHandler
 from http.server import HTTPServer
 from threading import Thread
@@ -24,8 +23,12 @@ class MockHandler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:
         """Process GET request"""
-        exit_response: Tuple[str, int] = (DEFAULT_RETURN_BODY, 200)
-        # route = self.requestline.split()[1]
+        return_code = int(self.requestline.split()[1].strip("/"))
+        if return_code in range(200, 299):
+            exit_response: Tuple[str, int] = (DEFAULT_RETURN_BODY, return_code)
+        else:
+            exit_response = (ERROR_RETURN_BODY, return_code)
+
         self.send_response(exit_response[1])
         self.end_headers()
         self.wfile.write(exit_response[0].encode())
@@ -67,25 +70,3 @@ class MockServer:
     def start_daemon(self) -> None:
         """Start server daemon"""
         self.thread.start()
-
-
-if __name__ == "__main__":
-    mock_api = MockServer()
-    mock_api.start_daemon()
-    print(mock_api.address, mock_api.port)
-
-    context = ssl.SSLContext(ssl.PROTOCOL_SSLv23)
-    context.load_cert_chain(certfile=SSL_FILE, password=SSL_FILE)
-    client = HTTPSConnection("localhost", mock_api.port, context=context)
-
-    client.request(
-        "GET",
-        "",
-        None,
-        headers={"Auth": "rooHappy"},
-    )
-
-    response = client.getresponse()
-    print(response.status)
-    print(response.read().decode("utf-8"))
-    print("*" * 79)

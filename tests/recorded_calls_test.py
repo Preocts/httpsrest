@@ -7,6 +7,7 @@ from unittest.mock import patch
 import pytest
 import vcr
 from httpsrest import HttpsRest
+from httpsrest import HttpsResult
 
 from tests.localrest import MockServer
 
@@ -60,17 +61,22 @@ def fixture_base_client(
 
 
 @pytest.mark.parametrize(
-    ("method", "route", "result"),
-    (("get", "/200", 200),),
+    ("method", "route", "status"),
+    (
+        ("get", "/200", 200),
+        ("get", "/400", 400),
+    ),
 )
 def test_valid_get(
-    base_client: HttpsRest, method: str, route: str, result: int
+    base_client: HttpsRest, method: str, route: str, status: int
 ) -> None:
     """Method tests"""
     base_client.set_timeout(1)
     attrib = getattr(base_client, method)
-    attrib(route)
-    assert result == result
+    result: HttpsResult = attrib(route)
+    assert result.status == status
+    assert result.json and result.body
+    assert isinstance(result.json, dict)
 
 
 # ctx = ssl.create_default_context()

@@ -11,6 +11,7 @@ from http.client import HTTPSConnection
 from typing import Any
 from typing import Dict
 from typing import MutableSet
+from typing import NamedTuple
 from typing import Optional
 from typing import Tuple
 from urllib import parse
@@ -18,9 +19,18 @@ from urllib import parse
 TIMEOUT_DEFAULT = 30
 THROTTLE_TIMEOUT_DEFAULT = 60
 MAX_RETRIES_DEFAULT = 3
-RETRY_ON_DEFAULT = {401, 402, 403, 408, 500, 502, 503, 504}
+RETRY_ON_DEFAULT = {401, 402, 403, 408, 429, 500, 502, 503, 504}
 ENCODE_URL_DEFAULT = True
 USE_URLENCODE_DEFAULT = False
+
+
+class HttpsResult(NamedTuple):
+    """Dataclass for returned results of HTTPS call"""
+
+    json: Dict[str, Any]
+    body: str
+    retry_count: int
+    status: int
 
 
 class HttpsRestConfig:
@@ -92,11 +102,7 @@ class HttpsRest:
 
     @property
     def retry_on(self) -> Tuple[int, ...]:
-        """
-        Returns a tuple of HTTP status codes that will trigger a retry
-
-        NOTE: 429 (throttled) always triggers a retry
-        """
+        """Returns a tuple of HTTP status codes that will trigger a retry"""
         return tuple(self._config.retry_on)
 
     def set_port(self, port: int) -> None:
@@ -191,11 +197,21 @@ class HttpsRest:
         except HTTPException as err:
             self.logger.error("Connect attempt failed: %s", err)
 
-    def get(self, route: str) -> int:
+    def get(self, route: str) -> HttpsResult:
         if self._client is None:
-            return 0
+            return HttpsResult({}, "", 0, 0)
 
         self._client.request("GET", route, None, headers={})
-        response = self._client.getresponse()
+        result = self._client.getresponse()
+        raw_response = result.read().decode()
+        try:
+            json_response = json.loads(raw_response)
+        except json.JSONDecodeError:
+            json_response = {}
 
-        return response.status
+        return HttpsResult(
+            json=json_response,
+            body=raw_response,
+            retry_count=0,
+            status=result.status,
+        )
