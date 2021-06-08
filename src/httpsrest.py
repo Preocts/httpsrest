@@ -209,7 +209,22 @@ class HttpsRest:
     def _handle_request(
         self, method: str, route: str, payload: Optional[str]
     ) -> HttpsResult:
-        """Send the HTTPS request and process response"""
+        """Send the HTTPS request, process response, and handle retries"""
+        for _ in range(self.max_retries + 1):
+            result = self._send_and_parse_request(method, route, payload)
+
+            if result.status in range(200, 299):
+                return result
+            else:
+                # TODO retry handler
+                return result
+
+        return HttpsResult()
+
+    def _send_and_parse_request(
+        self, method: str, route: str, payload: Optional[str]
+    ) -> HttpsResult:
+        """Send request, parse resonse"""
         if self._client is None:
             raise Exception("Unexpected call of handle_requests with no client")
 
