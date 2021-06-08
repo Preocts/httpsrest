@@ -6,8 +6,11 @@ Repo: https/github.com/Preocts/httpsrest
 """
 import json
 import logging
+from http.client import CannotSendRequest
 from http.client import HTTPException
+from http.client import HTTPResponse
 from http.client import HTTPSConnection
+from http.client import RemoteDisconnected
 from typing import Any
 from typing import Dict
 from typing import MutableSet
@@ -25,12 +28,12 @@ USE_URLENCODE_DEFAULT = False
 
 
 class HttpsResult(NamedTuple):
-    """Dataclass for returned results of HTTPS call"""
+    """Data structure for returned results of HTTPS call"""
 
-    json: Dict[str, Any]
-    body: str
-    retry_count: int
-    status: int
+    json: Dict[str, Any] = {}
+    body: str = ""
+    retry_count: int = 0
+    status: int = 0
 
 
 class HttpsRestConfig:
@@ -198,20 +201,42 @@ class HttpsRest:
             self.logger.error("Connect attempt failed: %s", err)
 
     def get(self, route: str) -> HttpsResult:
+        """Send a GET request"""
         if self._client is None:
-            return HttpsResult({}, "", 0, 0)
+            self._connect()
+        return self._handle_request("GET", route, None)
 
-        self._client.request("GET", route, None, headers={})
-        result = self._client.getresponse()
-        raw_response = result.read().decode()
+    def _handle_request(
+        self, method: str, route: str, payload: Optional[str]
+    ) -> HttpsResult:
+        """Send the HTTPS request and process response"""
+        if self._client is None:
+            raise Exception("Unexpected call of handle_requests with no client")
+
         try:
-            json_response = json.loads(raw_response)
+            self._client.request(method.upper(), route, payload, headers={})
+            result = self._parse_response(self._client.getresponse())
+
+        except (RemoteDisconnected, CannotSendRequest) as err:
+            self.logger.error("Unable to send to remote: '%s'", err)
+            result = HttpsResult(status=900)
+        except (ConnectionError, TimeoutError) as err:
+            self.logger.error("Connection error: '%s'", err)
+            result = HttpsResult(status=901)
+
+        return result
+
+    def _parse_response(self, response: HTTPResponse) -> HttpsResult:
+        """Parse the response of a HTTPSConnection reqeust"""
+        str_body = response.read().decode(encoding="utf-8")
+        try:
+            json_response = json.loads(str_body)
         except json.JSONDecodeError:
             json_response = {}
 
         return HttpsResult(
             json=json_response,
-            body=raw_response,
+            body=str_body,
             retry_count=0,
-            status=result.status,
+            status=response.status,
         )
