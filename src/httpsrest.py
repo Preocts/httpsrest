@@ -6,6 +6,7 @@ Repo: https/github.com/Preocts/httpsrest
 """
 import json
 import logging
+import time
 from http.client import CannotSendRequest
 from http.client import HTTPException
 from http.client import HTTPResponse
@@ -17,8 +18,10 @@ from typing import MutableSet
 from typing import NamedTuple
 from typing import Optional
 from typing import Tuple
+from typing import TypedDict
 from urllib import parse
 
+SLEEP_BASE_TIME = 5
 TIMEOUT_DEFAULT = 30
 THROTTLE_TIMEOUT_DEFAULT = 60
 MAX_RETRIES_DEFAULT = 3
@@ -32,8 +35,19 @@ class HttpsResult(NamedTuple):
 
     json: Dict[str, Any] = {}
     body: str = ""
-    retry_count: int = 0
+    retry: bool = False
+    attempts: int = 0
     status: int = 0
+
+
+class _HttpsResult(TypedDict):
+    """Private data class for passing mutable results to processes"""
+
+    json: Dict[str, Any]
+    body: str
+    retry: bool
+    attempts: int
+    status: int
 
 
 class HttpsRestConfig:
@@ -181,15 +195,15 @@ class HttpsRest:
         cleaned_url = url.lower().replace("https://", "").replace("http://", "")
 
         if "/" in cleaned_url:
-            self.logger.error("Route in url: %s", cleaned_url)
+            self.logger.debug("Route in url: %s", cleaned_url)
             raise Exception("Do not include /routes in base url, use .set_base_route()")
         if "?" in cleaned_url:
-            self.logger.error("Possible ? parameters in url: %s", cleaned_url)
+            self.logger.debug("Possible ? parameters in url: %s", cleaned_url)
             raise Exception("Remove URI parameters from base url.")
 
         return cleaned_url
 
-    def _connect(self) -> None:
+    def connect(self) -> None:
         """Opens the connection. Not usually needed to be called directly"""
         try:
             self._client = HTTPSConnection(
@@ -198,33 +212,38 @@ class HttpsRest:
                 timeout=self.timeout,
             )
         except HTTPException as err:
-            self.logger.error("Connect attempt failed: %s", err)
+            self.logger.debug("Connect attempt failed: %s", err)
+
+    def close(self) -> None:
+        """Close any existing connection"""
+        if self._client is not None:
+            self._client = None
 
     def get(self, route: str) -> HttpsResult:
         """Send a GET request"""
         if self._client is None:
-            self._connect()
+            self.connect()
         return self._handle_request("GET", route, None)
 
     def _handle_request(
         self, method: str, route: str, payload: Optional[str]
     ) -> HttpsResult:
         """Send the HTTPS request, process response, and handle retries"""
-        for _ in range(self.max_retries + 1):
-            result = self._send_and_parse_request(method, route, payload)
+        result = self._build_response()  # Default empty response
 
-            if result.status in range(200, 299):
-                return result
-            else:
-                # TODO retry handler
-                return result
+        while result["retry"] and self.max_retries >= result["attempts"]:
+            self._execute_sleep(result)
 
-        return HttpsResult()
+            result = self._send_request(method, route, payload)
 
-    def _send_and_parse_request(
+            self._process_attempt(result)
+
+        return HttpsResult(**result)
+
+    def _send_request(
         self, method: str, route: str, payload: Optional[str]
-    ) -> HttpsResult:
-        """Send request, parse resonse"""
+    ) -> _HttpsResult:
+        """Send request, return parsed resonse"""
         if self._client is None:
             raise Exception("Unexpected call of handle_requests with no client")
 
@@ -232,16 +251,18 @@ class HttpsRest:
             self._client.request(method.upper(), route, payload, headers={})
             result = self._parse_response(self._client.getresponse())
 
-        except (RemoteDisconnected, CannotSendRequest) as err:
-            self.logger.error("Unable to send to remote: '%s'", err)
-            result = HttpsResult(status=900)
-        except (ConnectionError, TimeoutError) as err:
-            self.logger.error("Connection error: '%s'", err)
-            result = HttpsResult(status=901)
+        except (
+            RemoteDisconnected,
+            CannotSendRequest,
+            ConnectionError,
+            TimeoutError,
+        ) as err:
+            self.logger.debug("Connection error: '%s'", err)
+            result = self._build_response(status=900)
 
         return result
 
-    def _parse_response(self, response: HTTPResponse) -> HttpsResult:
+    def _parse_response(self, response: HTTPResponse) -> _HttpsResult:
         """Parse the response of a HTTPSConnection reqeust"""
         str_body = response.read().decode(encoding="utf-8")
         try:
@@ -249,9 +270,40 @@ class HttpsRest:
         except json.JSONDecodeError:
             json_response = {}
 
-        return HttpsResult(
-            json=json_response,
-            body=str_body,
-            retry_count=0,
-            status=response.status,
-        )
+        return self._build_response(json_response, str_body, False, 0, response.status)
+
+    def _process_attempt(self, result: _HttpsResult) -> None:
+        """Process attempt, look at status code and take needed action"""
+        result["attempts"] += 1
+
+        if result["status"] == 900:  # Custom Error
+            self.logger.debug("Bouncing connection...")
+            self.close()
+            self.connect()
+
+        if result["status"] in self._config.retry_on:
+            result["retry"] = True
+
+        return None
+
+    def _execute_sleep(self, result: _HttpsResult) -> None:
+        """Runs sleep against a multiple of attempts"""
+        assert False
+        time.sleep(SLEEP_BASE_TIME * result["attempts"])
+
+    @staticmethod
+    def _build_response(
+        json: Dict[str, Any] = {},
+        body: str = "",
+        retry: bool = True,
+        attempts: int = 0,
+        status: int = 0,
+    ) -> _HttpsResult:
+        """Create private object"""
+        return {
+            "json": json,
+            "body": body,
+            "retry": retry,
+            "attempts": attempts,
+            "status": status,
+        }

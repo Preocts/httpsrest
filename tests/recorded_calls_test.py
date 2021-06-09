@@ -64,7 +64,7 @@ def fixture_base_client(
     ("method", "route", "status"),
     (
         ("get", "/200", 200),
-        ("get", "/400", 400),
+        ("get", "/401", 401),
     ),
 )
 def test_valid_get(
