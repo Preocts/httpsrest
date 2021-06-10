@@ -61,22 +61,24 @@ def fixture_base_client(
 
 
 @pytest.mark.parametrize(
-    ("method", "route", "status"),
+    ("method", "route", "attempts", "status"),
     (
-        ("get", "/200", 200),
-        ("get", "/401", 401),
+        ("get", "/200", 1, 200),
+        ("get", "/401", 2, 401),
     ),
 )
 def test_valid_get(
-    base_client: HttpsRest, method: str, route: str, status: int
+    base_client: HttpsRest, method: str, route: str, attempts: int, status: int
 ) -> None:
     """Method tests"""
     base_client.set_timeout(1)
+    base_client.set_max_retries(1)
     attrib = getattr(base_client, method)
     result: HttpsResult = attrib(route)
     assert result.status == status
     assert result.json and result.body
     assert isinstance(result.json, dict)
+    assert result.attempts == attempts
 
 
 # ctx = ssl.create_default_context()
