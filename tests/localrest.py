@@ -5,15 +5,17 @@ Requires a `server.pem` file to be generated. Do NOT commit this file
 
 >>> openssl req -new -x509 -keyout server.pem -out server.pem -days 365 -nodes
 """
+import json
 import socket
 import ssl
-from http.client import HTTPSConnection
 from http.server import BaseHTTPRequestHandler
 from http.server import HTTPServer
 from threading import Thread
 from typing import Tuple
 
 SSL_FILE = "tests/fixtures/mock_server.pem"
+DEFAULT_RETURN_BODY = json.dumps({"response": "Good"})
+ERROR_RETURN_BODY = json.dumps({"response": "Not good"})
 
 
 class MockHandler(BaseHTTPRequestHandler):
@@ -21,15 +23,19 @@ class MockHandler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:
         """Process GET request"""
-        exit_response: Tuple[str, int] = ("mock", 200)
-        # route = self.requestline.split()[1]
+        return_code = int(self.requestline.split()[1].strip("/"))
+        if return_code in range(200, 299):
+            exit_response: Tuple[str, int] = (DEFAULT_RETURN_BODY, return_code)
+        else:
+            exit_response = (ERROR_RETURN_BODY, return_code)
+
         self.send_response(exit_response[1])
         self.end_headers()
         self.wfile.write(exit_response[0].encode())
 
     def do_POST(self) -> None:
         """Process POST request"""
-        exit_response: Tuple[str, int] = ("mock", 200)
+        exit_response: Tuple[str, int] = (DEFAULT_RETURN_BODY, 200)
         # route = self.requestline.split()[1]
         self.send_response(exit_response[1])
         self.end_headers()
@@ -64,25 +70,3 @@ class MockServer:
     def start_daemon(self) -> None:
         """Start server daemon"""
         self.thread.start()
-
-
-if __name__ == "__main__":
-    mock_api = MockServer()
-    mock_api.start_daemon()
-    print(mock_api.address, mock_api.port)
-
-    context = ssl.SSLContext(ssl.PROTOCOL_SSLv23)
-    context.load_cert_chain(certfile=SSL_FILE, password=SSL_FILE)
-    client = HTTPSConnection("localhost", mock_api.port, context=context)
-
-    client.request(
-        "GET",
-        "",
-        None,
-        headers={"Auth": "rooHappy"},
-    )
-
-    response = client.getresponse()
-    print(response.status)
-    print(response.read().decode("utf-8"))
-    print("*" * 79)

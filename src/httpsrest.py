@@ -6,21 +6,39 @@ Repo: https/github.com/Preocts/httpsrest
 """
 import json
 import logging
-from http.client import HTTPException
+import time
+from http.client import CannotSendRequest
+from http.client import HTTPResponse
 from http.client import HTTPSConnection
+from http.client import RemoteDisconnected
 from typing import Any
 from typing import Dict
 from typing import MutableSet
+from typing import NamedTuple
 from typing import Optional
 from typing import Tuple
+from typing import TypedDict
 from urllib import parse
 
-TIMEOUT_DEFAULT = 30
-THROTTLE_TIMEOUT_DEFAULT = 60
-MAX_RETRIES_DEFAULT = 3
-RETRY_ON_DEFAULT = {401, 402, 403, 408, 500, 502, 503, 504}
-ENCODE_URL_DEFAULT = True
-USE_URLENCODE_DEFAULT = False
+
+class HttpsResult(NamedTuple):
+    """Data structure for returned results of HTTPS call"""
+
+    json: Dict[str, Any] = {}
+    body: str = ""
+    retry: bool = False
+    attempts: int = 0
+    status: int = 0
+
+
+class _HttpsResult(TypedDict):
+    """Private data class for passing mutable results to processes"""
+
+    json: Dict[str, Any]
+    body: str
+    retry: bool
+    attempts: int
+    status: int
 
 
 class HttpsRestConfig:
@@ -28,12 +46,13 @@ class HttpsRestConfig:
 
     def __init__(self) -> None:
         """Define defaults"""
-        self.connection_timeout: int = TIMEOUT_DEFAULT
-        self.throttle_timeout: int = THROTTLE_TIMEOUT_DEFAULT
-        self.max_retries: int = MAX_RETRIES_DEFAULT
-        self.retry_on: MutableSet[int] = RETRY_ON_DEFAULT
-        self.encode_url: bool = ENCODE_URL_DEFAULT
-        self.use_urlencode: bool = USE_URLENCODE_DEFAULT
+        self.sleep_base_time: int = 5
+        self.connection_timeout: int = 30
+        self.throttle_timeout: int = 60
+        self.max_retries: int = 3
+        self.retry_on: MutableSet[int] = {401, 402, 403, 408, 429, 500, 502, 503, 504}
+        self.encode_url: bool = True
+        self.use_urlencode: bool = False
         self.port: int = 443
 
 
@@ -92,11 +111,7 @@ class HttpsRest:
 
     @property
     def retry_on(self) -> Tuple[int, ...]:
-        """
-        Returns a tuple of HTTP status codes that will trigger a retry
-
-        NOTE: 429 (throttled) always triggers a retry
-        """
+        """Returns a tuple of HTTP status codes that will trigger a retry"""
         return tuple(self._config.retry_on)
 
     def set_port(self, port: int) -> None:
@@ -104,23 +119,23 @@ class HttpsRest:
         self._parse_no_negative_int(port)
         self._config.port = port if (port > 1) and (port < 65535) else 443
 
-    def set_timeout(self, seconds: int = TIMEOUT_DEFAULT) -> None:
+    def set_timeout(self, seconds: int) -> None:
         """Set the time, in seconds, a connection will wait before timing out"""
         self._config.connection_timeout = self._parse_no_negative_int(seconds)
 
-    def set_throttle_timeout(self, seconds: int = THROTTLE_TIMEOUT_DEFAULT) -> None:
+    def set_throttle_timeout(self, seconds: int) -> None:
         """Time, in seconds, a connection will pause if throttled before continuing"""
         self._config.throttle_timeout = self._parse_no_negative_int(seconds)
 
-    def set_max_retries(self, count: int = MAX_RETRIES_DEFAULT) -> None:
+    def set_max_retries(self, count: int) -> None:
         """Set the number of retries that will be attempted before giving up"""
         self._config.max_retries = self._parse_no_negative_int(count)
 
-    def set_encode_url(self, encode_url: bool = ENCODE_URL_DEFAULT) -> None:
+    def set_encode_url(self, encode_url: bool) -> None:
         """If true, all urls will be encoded prior to sending"""
         self._config.encode_url = bool(encode_url)
 
-    def set_use_urlencode(self, use_urlencode: bool = USE_URLENCODE_DEFAULT) -> None:
+    def set_use_urlencode(self, use_urlencode: bool) -> None:
         """If true, json payloads are translated to URL parameters"""
         self._config.use_urlencode = bool(use_urlencode)
 
@@ -172,30 +187,86 @@ class HttpsRest:
         cleaned_url = url.lower().replace("https://", "").replace("http://", "")
 
         if "/" in cleaned_url:
-            self.logger.error("Route in url: %s", cleaned_url)
+            self.logger.debug("Route in url: %s", cleaned_url)
             raise Exception("Do not include /routes in base url, use .set_base_route()")
         if "?" in cleaned_url:
-            self.logger.error("Possible ? parameters in url: %s", cleaned_url)
+            self.logger.debug("Possible ? parameters in url: %s", cleaned_url)
             raise Exception("Remove URI parameters from base url.")
 
         return cleaned_url
 
-    def _connect(self) -> None:
-        """Opens the connection. Not usually needed to be called directly"""
-        try:
-            self._client = HTTPSConnection(
-                host=self.url,
-                port=self.port,
-                timeout=self.timeout,
-            )
-        except HTTPException as err:
-            self.logger.error("Connect attempt failed: %s", err)
+    def _connect(self) -> HTTPSConnection:
+        """Returns a connection. Not usually needed to be called directly"""
+        return HTTPSConnection(host=self.url, port=self.port, timeout=self.timeout)
 
-    def get(self, route: str) -> int:
+    def close(self) -> None:
+        """Close any existing connection"""
+        if self._client is not None:
+            self._client = None
+
+    def get(self, route: str) -> HttpsResult:
+        """Send a GET request"""
+        return self._handle_request("GET", route, None)
+
+    def _handle_request(
+        self, method: str, route: str, payload: Optional[str]
+    ) -> HttpsResult:
+        """Send the HTTPS request, process response, and handle retries"""
+        result = self._build_response()  # Default empty response
+
+        while result["retry"] and self.max_retries >= result["attempts"]:
+            self._execute_sleep(result)
+
+            response = self._get_reponse(method, route, payload)
+            result["attempts"] += 1
+            if response is not None:
+                result["body"] = response.read().decode()
+                result["json"] = self._parse_json_body(result["body"])
+                result["status"] = response.status
+                result["retry"] = self._needs_retry(result["status"])
+            else:
+                result["retry"] = True
+
+        return HttpsResult(**result)
+
+    def _get_reponse(
+        self, method: str, route: str, payload: Optional[str]
+    ) -> Optional[HTTPResponse]:
+        """Send request, return response"""
         if self._client is None:
-            return 0
+            self._client = self._connect()
 
-        self._client.request("GET", route, None, headers={})
-        response = self._client.getresponse()
+        try:
+            self._client.request(method.upper(), route, payload, headers={})
+            return self._client.getresponse()
 
-        return response.status
+        except (
+            RemoteDisconnected,
+            CannotSendRequest,
+            ConnectionError,
+            TimeoutError,
+        ) as err:
+            self.logger.debug("Connection error: '%s'", err)
+            self.close()  # Forces the connection to reset
+
+        return None
+
+    def _parse_json_body(self, body: str) -> Dict[str, Any]:
+        """Parse the response of a HTTPSConnection reqeust"""
+        try:
+            return json.loads(body)
+        except json.JSONDecodeError:
+            return {}
+
+    def _needs_retry(self, status: int) -> bool:
+        """Returns true if a retry is needed by status code"""
+        return status in self._config.retry_on
+
+    def _execute_sleep(self, result: _HttpsResult) -> None:
+        """Runs sleep against a multiple of attempts"""
+        time.sleep(self._config.sleep_base_time * result["attempts"])
+
+    @staticmethod
+    def _build_response() -> _HttpsResult:
+        """Create private object"""
+        return {"json": {}, "body": "", "retry": True, "attempts": 0, "status": 0}
