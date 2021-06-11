@@ -259,6 +259,7 @@ class HttpsRest:
         except (
             RemoteDisconnected,
             CannotSendRequest,
+            ConnectionResetError,
             ConnectionError,
             TimeoutError,
         ) as err:
