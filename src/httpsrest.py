@@ -208,6 +208,22 @@ class HttpsRest:
         """Send a GET request"""
         return self._handle_request("GET", route, None)
 
+    def delete(self, route: str) -> HttpsResult:
+        """Send a DELETE request"""
+        return self._handle_request("DELETE", route, None)
+
+    def post(self, route: str, payload: Dict[str, Any]) -> HttpsResult:
+        """Send a POST request"""
+        return self._handle_request("POST", route, self.format_payload(payload))
+
+    def put(self, route: str, payload: Dict[str, Any]) -> HttpsResult:
+        """Send a PUT request"""
+        return self._handle_request("POST", route, self.format_payload(payload))
+
+    def patch(self, route: str, payload: Dict[str, Any]) -> HttpsResult:
+        """Send a PATCH request"""
+        return self._handle_request("PATCH", route, self.format_payload(payload))
+
     def _handle_request(
         self, method: str, route: str, payload: Optional[str]
     ) -> HttpsResult:

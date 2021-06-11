@@ -33,10 +33,50 @@ class MockHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(exit_response[0].encode())
 
+    def do_DELETE(self) -> None:
+        """Process GET request"""
+        return_code = int(self.requestline.split()[1].strip("/"))
+        if return_code in range(200, 299):
+            exit_response: Tuple[str, int] = (DEFAULT_RETURN_BODY, return_code)
+        else:
+            exit_response = (ERROR_RETURN_BODY, return_code)
+
+        self.send_response(exit_response[1])
+        self.end_headers()
+        self.wfile.write(exit_response[0].encode())
+
     def do_POST(self) -> None:
         """Process POST request"""
-        exit_response: Tuple[str, int] = (DEFAULT_RETURN_BODY, 200)
-        # route = self.requestline.split()[1]
+        return_code = int(self.requestline.split()[1].strip("/"))
+        if return_code in range(200, 299):
+            exit_response: Tuple[str, int] = (DEFAULT_RETURN_BODY, return_code)
+        else:
+            exit_response = (ERROR_RETURN_BODY, return_code)
+
+        self.send_response(exit_response[1])
+        self.end_headers()
+        self.wfile.write(exit_response[0].encode())
+
+    def do_PUT(self) -> None:
+        """Process PUT request"""
+        return_code = int(self.requestline.split()[1].strip("/"))
+        if return_code in range(200, 299):
+            exit_response: Tuple[str, int] = (DEFAULT_RETURN_BODY, return_code)
+        else:
+            exit_response = (ERROR_RETURN_BODY, return_code)
+
+        self.send_response(exit_response[1])
+        self.end_headers()
+        self.wfile.write(exit_response[0].encode())
+
+    def do_PATCH(self) -> None:
+        """Process PATCH request"""
+        return_code = int(self.requestline.split()[1].strip("/"))
+        if return_code in range(200, 299):
+            exit_response: Tuple[str, int] = (DEFAULT_RETURN_BODY, return_code)
+        else:
+            exit_response = (ERROR_RETURN_BODY, return_code)
+
         self.send_response(exit_response[1])
         self.end_headers()
         self.wfile.write(exit_response[0].encode())

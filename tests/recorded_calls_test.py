@@ -5,7 +5,6 @@ from typing import Generator
 from unittest.mock import patch
 
 import pytest
-import vcr
 from httpsrest import HttpsRest
 from httpsrest import HttpsResult
 
@@ -14,15 +13,6 @@ from tests.localrest import MockServer
 RERECORD_ON_RUN = True
 
 MOCK_SSL_FILE = "tests/fixtures/mock_server.pem"
-CASSETTE_FILE = "tests/fixtures/cassettes/playback.yaml"
-
-vcr_record = vcr.VCR(
-    serializer="yaml",
-    cassette_library_dir="tests/fixtures/cassettes",
-    record_mode="once",
-    match_on=["uri", "method"],
-    ignore_localhost=False,
-)
 
 
 @pytest.fixture(scope="session", name="mock_server")
@@ -49,7 +39,6 @@ def fixture_mock_httpsconn(
     yield httpsconn
 
 
-# @vcr_record.use_cassette(CASSETTE_FILE)
 @pytest.fixture(scope="function", name="base_client")
 def fixture_base_client(
     mock_httpsconn: HTTPSConnection,
@@ -59,15 +48,45 @@ def fixture_base_client(
     with patch.object(client, "_client", mock_httpsconn):
         yield client
 
+    client.close()
+
+
+@pytest.mark.parametrize(
+    ("method", "route", "attempts", "status"),
+    (
+        ("put", "/200", 1, 200),
+        ("put", "/401", 2, 401),
+        ("post", "/200", 1, 200),
+        ("post", "/401", 2, 401),
+        ("patch", "/200", 1, 200),
+        ("patch", "/401", 2, 401),
+    ),
+)
+def test_valid_methods_with_payloads(
+    base_client: HttpsRest, method: str, route: str, attempts: int, status: int
+) -> None:
+    """Method tests"""
+    payload = {"sample": "testing"}
+    base_client.set_timeout(1)
+    base_client.set_max_retries(1)
+    attrib = getattr(base_client, method)
+    result: HttpsResult = attrib(route, payload)
+    assert result.status == status
+    assert result.json and result.body
+    assert isinstance(result.json, dict)
+    assert result.attempts == attempts
+
 
 @pytest.mark.parametrize(
     ("method", "route", "attempts", "status"),
     (
         ("get", "/200", 1, 200),
         ("get", "/401", 2, 401),
+        ("delete", "/200", 1, 200),
+        ("delete", "/401", 2, 401),
     ),
 )
-def test_valid_get(
+def test_valid_methods_without_payloads(
     base_client: HttpsRest, method: str, route: str, attempts: int, status: int
 ) -> None:
     """Method tests"""
