@@ -7,10 +7,9 @@ Repo: https/github.com/Preocts/httpsrest
 import json
 import logging
 import time
-from http.client import CannotSendRequest
+from http.client import HTTPException
 from http.client import HTTPResponse
 from http.client import HTTPSConnection
-from http.client import RemoteDisconnected
 from typing import Any
 from typing import Dict
 from typing import MutableSet
@@ -257,8 +256,7 @@ class HttpsRest:
             return self._client.getresponse()
 
         except (
-            RemoteDisconnected,
-            CannotSendRequest,
+            HTTPException,
             ConnectionResetError,
             ConnectionError,
             TimeoutError,

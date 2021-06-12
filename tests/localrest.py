@@ -21,8 +21,7 @@ ERROR_RETURN_BODY = json.dumps({"response": "Not good"})
 class MockHandler(BaseHTTPRequestHandler):
     """Mock HTTPRequestHandler"""
 
-    def do_GET(self) -> None:
-        """Process GET request"""
+    def sendback_answer(self) -> None:
         return_code = int(self.requestline.split()[1].strip("/"))
         if return_code in range(200, 299):
             exit_response: Tuple[str, int] = (DEFAULT_RETURN_BODY, return_code)
@@ -32,54 +31,26 @@ class MockHandler(BaseHTTPRequestHandler):
         self.send_response(exit_response[1])
         self.end_headers()
         self.wfile.write(exit_response[0].encode())
+
+    def do_GET(self) -> None:
+        """Process GET request"""
+        self.sendback_answer()
 
     def do_DELETE(self) -> None:
         """Process GET request"""
-        return_code = int(self.requestline.split()[1].strip("/"))
-        if return_code in range(200, 299):
-            exit_response: Tuple[str, int] = (DEFAULT_RETURN_BODY, return_code)
-        else:
-            exit_response = (ERROR_RETURN_BODY, return_code)
-
-        self.send_response(exit_response[1])
-        self.end_headers()
-        self.wfile.write(exit_response[0].encode())
+        self.sendback_answer()
 
     def do_POST(self) -> None:
         """Process POST request"""
-        return_code = int(self.requestline.split()[1].strip("/"))
-        if return_code in range(200, 299):
-            exit_response: Tuple[str, int] = (DEFAULT_RETURN_BODY, return_code)
-        else:
-            exit_response = (ERROR_RETURN_BODY, return_code)
-
-        self.send_response(exit_response[1])
-        self.end_headers()
-        self.wfile.write(exit_response[0].encode())
+        self.sendback_answer()
 
     def do_PUT(self) -> None:
         """Process PUT request"""
-        return_code = int(self.requestline.split()[1].strip("/"))
-        if return_code in range(200, 299):
-            exit_response: Tuple[str, int] = (DEFAULT_RETURN_BODY, return_code)
-        else:
-            exit_response = (ERROR_RETURN_BODY, return_code)
-
-        self.send_response(exit_response[1])
-        self.end_headers()
-        self.wfile.write(exit_response[0].encode())
+        self.sendback_answer()
 
     def do_PATCH(self) -> None:
         """Process PATCH request"""
-        return_code = int(self.requestline.split()[1].strip("/"))
-        if return_code in range(200, 299):
-            exit_response: Tuple[str, int] = (DEFAULT_RETURN_BODY, return_code)
-        else:
-            exit_response = (ERROR_RETURN_BODY, return_code)
-
-        self.send_response(exit_response[1])
-        self.end_headers()
-        self.wfile.write(exit_response[0].encode())
+        self.sendback_answer()
 
 
 class MockServer:

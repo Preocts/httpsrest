@@ -51,53 +51,46 @@ def fixture_base_client(
     client.close()
 
 
-@pytest.mark.parametrize(
-    ("method", "route", "attempts", "status"),
-    (
-        ("put", "/200", 1, 200),
-        ("put", "/401", 2, 401),
-        ("post", "/200", 1, 200),
-        ("post", "/401", 2, 401),
-        ("patch", "/200", 1, 200),
-        ("patch", "/401", 2, 401),
-    ),
-)
-def test_valid_methods_with_payloads(
-    base_client: HttpsRest, method: str, route: str, attempts: int, status: int
-) -> None:
+@pytest.mark.parametrize(("method"), (("put"), ("post"), ("patch")))
+def test_methods_with_payloads(base_client: HttpsRest, method: str) -> None:
     """Method tests"""
     payload = {"sample": "testing"}
+    route = "/200"
+    expected = 200
     base_client.set_timeout(1)
     base_client.set_max_retries(1)
     attrib = getattr(base_client, method)
     result: HttpsResult = attrib(route, payload)
-    assert result.status == status
+
+    assert result.status == expected
     assert result.json and result.body
     assert isinstance(result.json, dict)
-    assert result.attempts == attempts
 
 
-@pytest.mark.parametrize(
-    ("method", "route", "attempts", "status"),
-    (
-        ("get", "/200", 1, 200),
-        ("get", "/401", 2, 401),
-        ("delete", "/200", 1, 200),
-        ("delete", "/401", 2, 401),
-    ),
-)
-def test_valid_methods_without_payloads(
-    base_client: HttpsRest, method: str, route: str, attempts: int, status: int
-) -> None:
+@pytest.mark.parametrize(("method"), (("get"), ("delete")))
+def test_valid_methods_without_payloads(base_client: HttpsRest, method: str) -> None:
     """Method tests"""
+    route = "/200"
+    expected = 200
     base_client.set_timeout(1)
     base_client.set_max_retries(1)
     attrib = getattr(base_client, method)
     result: HttpsResult = attrib(route)
-    assert result.status == status
+    assert result.status == expected
     assert result.json and result.body
     assert isinstance(result.json, dict)
-    assert result.attempts == attempts
+
+
+def test_retry_codes(base_client: HttpsRest) -> None:
+    """Ensure retry"""
+    route = "/" + str(base_client.retry_on[0])
+    excepted = base_client.retry_on[0]
+    base_client.set_timeout(1)
+    base_client.set_max_retries(1)
+    result = base_client.get(route)
+
+    assert result.status == excepted
+    assert result.attempts == 2
 
 
 # ctx = ssl.create_default_context()
