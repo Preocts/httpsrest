@@ -5,14 +5,21 @@ from typing import Generator
 from unittest.mock import patch
 
 import pytest
+import vcr
 from httpsrest import HttpsRest
 from httpsrest import HttpsResult
 
 from tests.localrest import MockServer
 
-RERECORD_ON_RUN = True
-
 MOCK_SSL_FILE = "tests/fixtures/mock_server.pem"
+
+recorder = vcr.VCR(
+    serializer="yaml",
+    cassette_library_dir="tests/fixtures",
+    match_on=["url", "method"],
+    ignore_localhost=False,
+    record_mode="new_episodes",
+)
 
 
 @pytest.fixture(scope="session", name="mock_server")
@@ -30,6 +37,7 @@ def fixture_mock_httpsconn(
     """Create a SSL contect connection object"""
     context = ssl.SSLContext(ssl.PROTOCOL_TLS)
     context.load_cert_chain(certfile=MOCK_SSL_FILE, password=MOCK_SSL_FILE)
+
     httpsconn = HTTPSConnection(
         host="localhost",
         port=mock_server.port,
@@ -45,6 +53,7 @@ def fixture_base_client(
 ) -> Generator[HttpsRest, None, None]:
     """Yields a default init'ed class instance pointed to localhost"""
     client = HttpsRest("localhost")
+
     with patch.object(client, "_client", mock_httpsconn):
         yield client
 
@@ -60,7 +69,9 @@ def test_methods_with_payloads(base_client: HttpsRest, method: str) -> None:
     base_client.set_timeout(1)
     base_client.set_max_retries(1)
     attrib = getattr(base_client, method)
-    result: HttpsResult = attrib(route, payload)
+
+    with recorder.use_cassette("recorded_test.yaml"):
+        result: HttpsResult = attrib(route, payload)
 
     assert result.status == expected
     assert result.json and result.body

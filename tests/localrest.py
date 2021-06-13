@@ -86,12 +86,3 @@ class MockServer:
     def start_daemon(self) -> None:
         """Start server daemon"""
         self.thread.start()
-
-
-# ctx = ssl.create_default_context()
-# ctx.check_hostname = False
-# ctx.verify_mode = ssl.CERT_NONE
-# [12:06 PM]
-# try adding this
-# [12:06 PM]
-# also, add context = ctx in urlopen
