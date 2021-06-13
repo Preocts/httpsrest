@@ -66,6 +66,7 @@ class HttpsRest:
         self._client: Optional[HTTPSConnection] = None
         self._url = self._parse_url(url)
         self._base_route = ""
+        self._headers: Dict[str, str] = {}
         self._config = HttpsRestConfig()
         self.set_base_route(base_route)
 
@@ -78,6 +79,11 @@ class HttpsRest:
     def base_route(self) -> str:
         """Base route appended to all API calls"""
         return self._base_route
+
+    @property
+    def headers(self) -> Dict[str, str]:
+        """Headers being sent with all requests"""
+        return self._headers.copy()
 
     @property
     def backoff(self) -> int:
@@ -118,6 +124,12 @@ class HttpsRest:
     def retry_on(self) -> Tuple[int, ...]:
         """Returns a tuple of HTTP status codes that will trigger a retry"""
         return tuple(self._config.retry_on)
+
+    def set_headers(self, headers: Dict[str, str]) -> None:
+        """Set the headers for requests"""
+        if not isinstance(headers, dict):
+            raise ValueError("Headers must be provided as a dict")
+        self._headers = headers.copy()
 
     def set_backoff(self, seconds: int) -> None:
         """Set the time, in seconds, to start incremental backoffs"""
@@ -262,7 +274,7 @@ class HttpsRest:
             self._client = self._connect()
 
         try:
-            self._client.request(method.upper(), route, payload, headers={})
+            self._client.request(method.upper(), route, payload, headers=self._headers)
             return self._client.getresponse()
 
         except (

@@ -4,6 +4,11 @@ from typing import Generator
 import pytest
 from httpsrest import HttpsRest
 
+TEST_HEADERS = {
+    "Content": "application/json",
+    "Authorization": "bearer = ccc",
+}
+
 
 @pytest.fixture(scope="function", name="base_client")
 def fixture_base_client() -> Generator[HttpsRest, None, None]:
@@ -152,3 +157,13 @@ def test_format_route_encoding(
     base_client.set_encode_url(encode)
     result = base_client.format_route(in_)
     assert result == out
+
+
+def test_set_headers(base_client: HttpsRest) -> None:
+    """Set headers"""
+    base_client.set_headers(TEST_HEADERS)
+
+    assert base_client.headers == TEST_HEADERS
+
+    with pytest.raises(ValueError):
+        base_client.set_headers("Hello")  # type: ignore
