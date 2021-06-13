@@ -53,6 +53,10 @@ def test_set_base_route(base_client: HttpsRest, base_route: str, expected: str) 
 @pytest.mark.parametrize(
     ("attrib", "set_", "get_"),
     (
+        ("backoff", 10, 10),
+        ("backoff", -19, 0),
+        ("backoff", 0, 0),
+        ("backoff", "foo", -1),
         ("timeout", 10, 10),
         ("timeout", -19, 0),
         ("timeout", 0, 0),

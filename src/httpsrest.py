@@ -46,7 +46,7 @@ class HttpsRestConfig:
 
     def __init__(self) -> None:
         """Define defaults"""
-        self.sleep_base_time: int = 5
+        self.backoff_time: int = 5
         self.connection_timeout: int = 30
         self.throttle_timeout: int = 60
         self.max_retries: int = 3
@@ -78,6 +78,11 @@ class HttpsRest:
     def base_route(self) -> str:
         """Base route appended to all API calls"""
         return self._base_route
+
+    @property
+    def backoff(self) -> int:
+        """Starting time, in seconds, incremental backoffs use."""
+        return self._config.backoff_time
 
     @property
     def port(self) -> int:
@@ -113,6 +118,10 @@ class HttpsRest:
     def retry_on(self) -> Tuple[int, ...]:
         """Returns a tuple of HTTP status codes that will trigger a retry"""
         return tuple(self._config.retry_on)
+
+    def set_backoff(self, seconds: int) -> None:
+        """Set the time, in seconds, to start incremental backoffs"""
+        self._config.backoff_time = self._parse_no_negative_int(seconds)
 
     def set_port(self, port: int) -> None:
         """Sets port to be used"""
@@ -280,7 +289,7 @@ class HttpsRest:
 
     def _execute_sleep(self, result: _HttpsResult) -> None:
         """Runs sleep against a multiple of attempts"""
-        time.sleep(self._config.sleep_base_time * result["attempts"])
+        time.sleep(self._config.backoff_time * result["attempts"])
 
     @staticmethod
     def _build_response() -> _HttpsResult:
