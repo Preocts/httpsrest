@@ -93,10 +93,21 @@ def test_retry_codes(base_client: HttpsRest) -> None:
     assert result.attempts == 2
 
 
-# ctx = ssl.create_default_context()
-# ctx.check_hostname = False
-# ctx.verify_mode = ssl.CERT_NONE
-# [12:06 PM]
-# try adding this
-# [12:06 PM]
-# also, add context = ctx in urlopen
+def test_non_json_return(base_client: HttpsRest) -> None:
+    """Sometimes we don't get json back"""
+    result = base_client.get("/901")
+
+    assert result.body == "Hello world"
+    assert result.json == {}
+
+
+def test_timeout(base_client: HttpsRest) -> None:
+    """Timeout on attempt twice then clean fail"""
+    base_client.set_timeout(1)
+    base_client.set_max_retries(1)
+
+    result = base_client.get("/902")
+
+    assert result.status == 0
+    assert not result.body
+    assert not result.json

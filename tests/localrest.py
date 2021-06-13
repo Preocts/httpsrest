@@ -8,6 +8,7 @@ Requires a `server.pem` file to be generated. Do NOT commit this file
 import json
 import socket
 import ssl
+import time
 from http.server import BaseHTTPRequestHandler
 from http.server import HTTPServer
 from threading import Thread
@@ -25,6 +26,10 @@ class MockHandler(BaseHTTPRequestHandler):
         return_code = int(self.requestline.split()[1].strip("/"))
         if return_code in range(200, 299):
             exit_response: Tuple[str, int] = (DEFAULT_RETURN_BODY, return_code)
+        elif return_code == 901:
+            exit_response = ("Hello world", 200)
+        elif return_code == 902:
+            time.sleep(30)
         else:
             exit_response = (ERROR_RETURN_BODY, return_code)
 
@@ -81,3 +86,12 @@ class MockServer:
     def start_daemon(self) -> None:
         """Start server daemon"""
         self.thread.start()
+
+
+# ctx = ssl.create_default_context()
+# ctx.check_hostname = False
+# ctx.verify_mode = ssl.CERT_NONE
+# [12:06 PM]
+# try adding this
+# [12:06 PM]
+# also, add context = ctx in urlopen

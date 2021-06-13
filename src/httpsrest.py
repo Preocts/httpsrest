@@ -10,6 +10,7 @@ import time
 from http.client import HTTPException
 from http.client import HTTPResponse
 from http.client import HTTPSConnection
+from socket import timeout
 from typing import Any
 from typing import Dict
 from typing import MutableSet
@@ -217,7 +218,7 @@ class HttpsRest:
 
     def put(self, route: str, payload: Dict[str, Any]) -> HttpsResult:
         """Send a PUT request"""
-        return self._handle_request("POST", route, self.format_payload(payload))
+        return self._handle_request("PUT", route, self.format_payload(payload))
 
     def patch(self, route: str, payload: Dict[str, Any]) -> HttpsResult:
         """Send a PATCH request"""
@@ -259,7 +260,7 @@ class HttpsRest:
             HTTPException,
             ConnectionResetError,
             ConnectionError,
-            TimeoutError,
+            timeout,
         ) as err:
             self.logger.debug("Connection error: '%s'", err)
             self.close()  # Forces the connection to reset
